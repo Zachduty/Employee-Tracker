@@ -1,2 +1,1 @@
-# Employee-Tracker
-Employee Tracker app
+# 12-Employee-Tracker
