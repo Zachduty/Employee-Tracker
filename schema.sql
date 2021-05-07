@@ -19,6 +19,7 @@ CREATE TABLE Managers (
     First_Name VARCHAR(30) NOT NULL, 
     Last_Name VARCHAR(30) NOT NULL, 
     Role_ID INTEGER NOT NULL, 
+    This_Manager_ID INTEGER,
     CONSTRAINT fk_Manager_Role_ID FOREIGN KEY (Role_ID) REFERENCES Roles(Role_ID),
 	Department_ID INTEGER NOT NULL,
     CONSTRAINT fkManager_Department_ID FOREIGN KEY (Department_ID) REFERENCES Departments(Department_ID),

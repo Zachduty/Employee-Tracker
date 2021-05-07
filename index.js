@@ -7,7 +7,7 @@ require('dotenv').config();
 
 // Other Stuff
 let existingRoles = new Array;
-let existingManagers = new Array;
+let existingManagers = ['None'];
 let existingEmployees = new Array;
 let existingDepartments = new Array;
 
@@ -22,6 +22,7 @@ const initalPrompt = {
             'View Employees By Department',
             'View Employees By Manager',
             'Add an Employee',
+            'Add a Manager',
             'Remove an Employee',
             'Add a Role',
             'Remove a Role',
@@ -226,6 +227,9 @@ const switchCases = (responses) => {
             break;
         case 'Add an Employee':
             addEmployeeName();
+            break;
+        case 'Add a Manager':
+            addManagerName();
             break;
         case 'Remove an Employee':
             removeEmployee();
@@ -562,18 +566,18 @@ const addEmployeeManager = (firstName, lastName, role, dept) => {
             if (err) throw err;
             // For Loop to Populate Existing Roles from DB
             for (let i = 0; i < res.length; i++) {
-                if (existingManagers.includes(res[i].First_Name && res[i].Last_Name)) {
+                if (existingManagers.includes(`${res[i].First_Name} ${res[i].Last_Name}`)) {
                     continue;
                 }
                 else {
-                    existingManagers.push(res[i].First_Name + ' ' + res[i].Last_Name)
-                    inquirer
-                    .prompt(selectManager)
-                    .then((selectManagerResponse) => {
-                        determineRoleID(firstName, lastName, role, selectManagerResponse.selectManager);
-                    })
+                    existingManagers.push(`${res[i].First_Name} ${res[i].Last_Name}`)
                 }
             }
+            inquirer
+            .prompt(selectManager)
+            .then((selectManagerResponse) => {
+                determineRoleID(firstName, lastName, role, selectManagerResponse.selectManager);
+            })
         }
     )
 }
@@ -590,21 +594,193 @@ const determineRoleID = (firstName, lastName, Role, selectManagerResponse) => {
 }
 
 const determineManagerID = (firstName, lastName, currentRoleID, selectManagerResponse) => {
-    const currentManager = selectManagerResponse.split(' ');
+    if(selectManagerResponse == "None"){
+        completeAddEmployeesNoManager(firstName, lastName, currentRoleID)
+    }
+    else{
+        const currentManager = selectManagerResponse.split(' ');
+        connection.query(
+            `SELECT Manager_ID FROM Managers WHERE First_Name = '${currentManager[0]}' AND Last_Name = '${currentManager[1]}'`,
+            (err, res) => {
+                if (err) throw err;
+                let currentManagerID = res[0].Manager_ID;
+                completeAddEmployees(firstName, lastName, currentRoleID, currentManagerID)
+              }  
+        )
+    }
+}
+
+const completeAddEmployees = (firstName, lastName, currentRoleID, currentManagerID) => {
+    console.log(firstName, lastName, currentRoleID, currentManagerID)
     connection.query(
-        `SELECT Manager_ID FROM Managers WHERE First_Name = '${currentManager[0]}' AND Last_Name = '${currentManager[1]}'`,
+        `INSERT INTO Employees(First_Name, Last_Name, Role_ID, Manager_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID}, ${currentManagerID})`,
         (err, res) => {
             if (err) throw err;
-            let currentManagerID = res[0].Manager_ID;
-            completeEmployeeAdd(firstName, lastName, currentRoleID, currentManagerID)
+            console.log(`${res.affectedRows} item inserted!\n`);
+            return init();
           }  
     )
 }
 
-const completeEmployeeAdd = (firstName, lastName, currentRoleID, currentManagerID) => {
+
+const completeAddEmployeesNoManager = (firstName, lastName, currentRoleID) => {
+    console.log(firstName, lastName, currentRoleID)
+    connection.query(
+        `INSERT INTO Employees(First_Name, Last_Name, Role_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID})`,
+        (err, res) => {
+            if (err) throw err;
+            console.log(`${res.affectedRows} item inserted!\n`);
+            return init();
+          }  
+    )
+}
+
+
+
+
+// Add a manager
+const addManagerName = () => {
+    inquirer
+        .prompt(addEmployeeNamePrompts)
+        .then((addEmployeeNamePrompts) => {
+            addManagerRole(addEmployeeNamePrompts.firstName, addEmployeeNamePrompts.lastName);
+        }
+    )
+}
+
+const addManagerRole = (firstName, lastName) => {
+    connection.query(
+        // Get Existing Roles from DB
+        `SELECT Title FROM Roles`,
+        (err, res) => {
+            if (err) throw err;
+            // For Loop to Populate Existing Roles from DB
+            for (let i = 0; i < res.length; i++) {
+                if (existingRoles.includes(res[i].Title)) {
+                    continue;
+                }
+                else {
+                    existingRoles.push(res[i].Title)
+                }
+            }
+            existingManagerRole(firstName, lastName);
+        }
+    )
+}
+
+const existingManagerRole = (firstName, lastName) => {
+    inquirer
+        .prompt(existingRolePrompt)
+        .then((existingRolePrompt) => {
+            confirmManagerDepartment(firstName, lastName, existingRolePrompt.existingRole);
+        })
+}
+
+const confirmManagerDepartment = (firstName, lastName, selectedRole) => {
+    console.log(`function fired confirmManagerDepartment`)
+    connection.query(
+        `SELECT Department_ID FROM Roles WHERE Title = '${selectedRole}'`,
+        (err, res) => {
+            if (err) throw err;
+            let currentDepartment = res[0].Department_ID;
+            addManagerManager(firstName, lastName, selectedRole, currentDepartment);
+        
+        })
+}
+
+const addManagerManager = (firstName, lastName, role, dept) => {
+    console.log(`function fired addManagerManager `, dept)
+    connection.query(
+        // Get Existing Roles from DB
+        `SELECT First_Name, Last_Name FROM Managers WHERE Department_ID = ${dept}`,
+        (err, res) => {
+            if (err) throw err;
+            // For Loop to Populate Existing Roles from DB
+            for (let i = 0; i < res.length; i++) {
+                if (existingManagers.includes(`${res[i].First_Name} ${res[i].Last_Name}`)) {
+                    continue;
+                }
+                else {
+                    existingManagers.push(`${res[i].First_Name} ${res[i].Last_Name}`)
+                }
+            }
+            inquirer
+            .prompt(selectManager)
+            .then((selectManagerResponse) => {
+                determineManagerRoleID(firstName, lastName, role, selectManagerResponse.selectManager, dept);
+            })
+        }
+    )
+}
+
+const determineManagerRoleID = (firstName, lastName, Role, selectManagerResponse, dept) => {
+    connection.query(
+        `SELECT Role_ID FROM Roles WHERE Title = '${Role}'`,
+        (err, res) => {
+            if (err) throw err;
+            let currentRoleID = res[0].Role_ID;
+            determineManagerManagerID(firstName, lastName, currentRoleID, selectManagerResponse, dept)     
+        }
+    )
+}
+
+const determineManagerManagerID = (firstName, lastName, currentRoleID, selectManagerResponse, dept) => {
+    if(selectManagerResponse == "None"){
+        completeManagerAddEmployeesNoManager(firstName, lastName, currentRoleID, dept)
+    }
+    else{
+        const currentManager = selectManagerResponse.split(' ');
+        connection.query(
+            `SELECT Manager_ID FROM Managers WHERE First_Name = '${currentManager[0]}' AND Last_Name = '${currentManager[1]}'`,
+            (err, res) => {
+                if (err) throw err;
+                let currentManagerID = res[0].Manager_ID;
+                completeManagerAddEmployees(firstName, lastName, currentRoleID, currentManagerID, dept)
+              }  
+        )
+    }
+}
+
+const completeManagerAddEmployees = (firstName, lastName, currentRoleID, currentManagerID, dept) => {
     console.log(firstName, lastName, currentRoleID, currentManagerID)
     connection.query(
         `INSERT INTO Employees(First_Name, Last_Name, Role_ID, Manager_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID}, ${currentManagerID})`,
+        (err, res) => {
+            if (err) throw err;
+            console.log(`${res.affectedRows} item inserted!\n`);
+            return completeManagerAddManagers(firstName,lastName,currentRoleID, currentManagerID, dept);
+          }  
+    )
+}
+
+const completeManagerAddManagers = (firstName, lastName, currentRoleID, currentManagerID, dept) => {
+    console.log(firstName, lastName, currentRoleID, currentManagerID)
+    connection.query(
+        `INSERT INTO Managers(First_Name, Last_Name, Role_ID, This_Manager_ID, Department_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID}, ${currentManagerID}, ${dept})`,
+        (err, res) => {
+            if (err) throw err;
+            console.log(`${res.affectedRows} item inserted!\n`);
+            return init();
+          }  
+    )
+}
+
+const completeManagerAddEmployeesNoManager = (firstName, lastName, currentRoleID, dept) => {
+    console.log(firstName, lastName, currentRoleID)
+    connection.query(
+        `INSERT INTO Employees(First_Name, Last_Name, Role_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID})`,
+        (err, res) => {
+            if (err) throw err;
+            console.log(`${res.affectedRows} item inserted!\n`);
+            return completeManagerAddManagersNoManager(firstName, lastName, currentRoleID, dept);
+          }  
+    )
+}
+
+const completeManagerAddManagersNoManager = (firstName, lastName, currentRoleID, dept) => {
+    console.log(firstName, lastName, currentRoleID)
+    connection.query(
+        `INSERT INTO Managers(First_Name, Last_Name, Role_ID, Department_ID) VALUES ('${firstName}', '${lastName}', ${currentRoleID}, ${dept})`,
         (err, res) => {
             if (err) throw err;
             console.log(`${res.affectedRows} item inserted!\n`);
@@ -681,6 +857,7 @@ const finalRemovedEmployee = (EmployeeID, fullName) => {
         }
     )
     existingEmployees.pop(fullName);
+    existingManagers.pop(fullName);
     return init();
 };
 
@@ -828,11 +1005,11 @@ const updateEmployeeRole = () => {
         if (err) {
           console.error(err);
         }
-        obtainRoleID(res[0].Employee_ID);
+        obtainRoleID(res[0].Employee_ID, chosenEmployee);
       }
     )
   };
-  const obtainRoleID = (Employee_ID) => {
+  const obtainRoleID = (Employee_ID, chosenEmployee) => {
     inquirer.prompt(chooseNewRole).then((chooseNewRoleResponse) => {
       connection.query(
         `SELECT Role_ID FROM Roles WHERE Title = "${chooseNewRoleResponse.newRole}"`,
@@ -840,21 +1017,98 @@ const updateEmployeeRole = () => {
           if (err) {
             console.error(err);
           }
-          updateRoleQuery(Employee_ID, res[0].Role_ID);
+          updateRoleQuery(Employee_ID, res[0].Role_ID, chosenEmployee);
         }
       )
     })
   }
-  const updateRoleQuery = (Employee_ID, Role_ID) => {
+  const updateRoleQuery = (Employee_ID, Role_ID, chosenEmployee) => {
     connection.query(
       `UPDATE Employees SET Role_ID = ${Role_ID} WHERE Employee_ID = ${Employee_ID}`,
       (error) => {
         if (error) throw err;
         console.log("Role updated.");
-        return init();
+        findIfManagerRole(Employee_ID, Role_ID, chosenEmployee);
       }
     );
-  };
+};
+
+const findIfManagerRole = (Employee_ID, Role_ID, chosenEmployee) => {
+    connection.query(
+        `SELECT Manager_ID FROM Managers WHERE Role_ID = ${Role_ID}`,
+        (err, res) => {
+            if (err) {
+              console.error(err);
+            }
+            console.log(res)
+            if(res[0]){
+                console.log("Managerial Role Found")
+                findDepartmentID(Employee_ID, Role_ID, chosenEmployee);
+            } else {
+                console.log('non managerial role')
+                return init();
+            }
+          } 
+    )
+}
+
+const findDepartmentID = (Employee_ID, Role_ID, chosenEmployee) => {
+    connection.query(
+        `SELECT Department_ID FROM Roles WHERE Role_ID = ${Role_ID}`,
+        (err, res) => {
+            if(err) {
+                console.error(err);
+            }
+            findManagerID(Employee_ID, Role_ID, chosenEmployee, res[0].Department_ID);
+        }
+    )
+}
+
+const findManagerID = (Employee_ID, Role_ID, chosenEmployee, Department_ID) => {
+    connection.query(
+        `SELECT Manager_ID FROM Employees WHERE Employee_ID = ${Employee_ID}`,
+        (err, res) => {
+            if(err){
+                console.error(err);
+            }
+            let hasManager = false;
+            if(res[0]){
+                hasManager = true;
+            }
+            if(hasManager == true){
+                createNewManager(Role_ID, chosenEmployee, Department_ID, res[0].Manager_ID);
+            }
+            else if(!res[0].Manager_ID){
+                createNewManagerNoManager(Role_ID,chosenEmployee,Department_ID)
+            }
+        }
+    )
+}
+
+const createNewManager = (Role_ID, chosenEmployee, Department_ID, Manager_ID) => {
+    connection.query(
+        `INSERT INTO Managers(First_Name, Last_Name, Role_ID, This_Manager_ID, Department_ID) VALUES ("${chosenEmployee[0]}", "${chosenEmployee[1]}", ${Role_ID}, ${Manager_ID}, ${Department_ID})`,
+        (err, res) => {
+            if(err){
+                console.error(err);
+            }
+            return init();
+        }
+    )
+}
+
+const createNewManagerNoManager = (Role_ID, chosenEmployee, Department_ID) => {
+    connection.query(
+        `INSERT INTO Managers(First_Name, Last_Name, Role_ID, Department_ID) VALUES ("${chosenEmployee[0]}", "${chosenEmployee[1]}", ${Role_ID}, ${Department_ID})`,
+        (err, res) => {
+            if(err){
+                console.error(err);
+            }
+            return init();
+        }
+    )
+}
+
 
 
 
